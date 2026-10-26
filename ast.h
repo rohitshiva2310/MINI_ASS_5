@@ -7,6 +7,12 @@
 #include <string>
 #include <vector>
 
+enum datatype {
+    double_type,
+    int_type,
+    bool_type
+};
+
 //===----------------------------------------------------------------------===//
 // Abstract Syntax Tree (aka Parse Tree)
 //===----------------------------------------------------------------------===//
@@ -17,10 +23,10 @@
 
 /// ExprAST - Base class for all expression nodes.
 class ExprAST {
-public:
-  virtual ~ExprAST() = default;
-
-  virtual llvm::Value *codegen() = 0;
+    public:
+      datatype ExprType; 
+      virtual ~ExprAST() = default;
+      virtual llvm::Value *codegen() = 0;
 };
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
@@ -28,7 +34,9 @@ class NumberExprAST : public ExprAST {
   double Val;
 
 public:
-  NumberExprAST(double Val) : Val(Val) {}
+    NumberExprAST(double Val) : Val(Val){
+        ExprType = double_type; 
+    }
 
   llvm::Value *codegen() override;
 };
@@ -49,9 +57,13 @@ class BinaryExprAST : public ExprAST {
   std::unique_ptr<ExprAST> LHS, RHS;
 
 public:
-  BinaryExprAST(char Op, std::unique_ptr<ExprAST> LHS,
-                std::unique_ptr<ExprAST> RHS)
-      : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)) {}
+    BinaryExprAST(char Op, std::unique_ptr< ExprAST > LHS,std::unique_ptr< ExprAST > RHS)
+    : Op(Op), LHS(std::move(LHS)), RHS(std::move(RHS)){
+        
+        if(Op == '<' || Op == '>'){
+            ExprType = bool_type;
+        }
+    }
 
   llvm::Value *codegen() override;
 };
@@ -73,15 +85,16 @@ public:
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
 class PrototypeAST {
-  std::string Name;
-  std::vector<std::string> Args;
-
-public:
-  PrototypeAST(const std::string &Name, std::vector<std::string> Args)
-      : Name(Name), Args(std::move(Args)) {}
-
-  llvm::Function *codegen();
-  const std::string &getName() const { return Name; }
+    std::string Name;
+    std::vector < std::pair <std::string,datatype >> ArgList; 
+  
+  public:
+    PrototypeAST(const std::string &Name, std::vector< std::pair <std::string,datatype >> ArgList)
+        : Name(Name), ArgList(std::move(ArgList)) {}
+  
+    llvm::Function *codegen();
+    const std::string &getName() const {return Name; }
+    const std::vector< std::pair<std::string, datatype >> &getArgs() const {return ArgList; }
 };
 
 /// FunctionAST - This class represents a function definition itself.
@@ -106,3 +119,8 @@ void HandleExtern(std::unique_ptr<PrototypeAST> ProtoAST);
 void HandleTopLevelExpression(std::unique_ptr<ExprAST> E);
 
 #endif // KALEIDOSCOPE_AST_H
+
+
+
+
+

@@ -36,29 +36,32 @@ void yyerror(const char *S);
   FunctionAST *func;
   std::vector<ExprAST *> *exprs;
   std::vector<std::string> *names;
+  datatype type_enum; 
+  std::vector< std::pair <std::string,datatype >> *param_list; 
 }
 
 %define parse.error detailed
 
-%token DEF EXTERN
+%token DEF EXTERN INT BOOL DOUBLE
 %token <str> IDENTIFIER
 %token <num> NUMBER
 
+%type <type_enum> type_decl
 %type <expr> expr
 %type <proto> prototype external
 %type <func> definition
 %type <exprs> args arglist
-%type <names> params
+%type <param_list> params
 
 /* Free values that get discarded during error recovery. */
-%destructor { delete $$; } <str> <expr> <proto> <func> <names>
+%destructor { delete $$; } <str> <expr> <proto> <func> <names> <param_list>
 %destructor { for (ExprAST *E : *$$) delete E; delete $$; } <exprs>
 
 /* Precedence, lowest first. Matches the old BinopPrecedence table:
    '<' = 10, '+' '-' = 20, '*' = 40, all left-associative. */
-%left '<'
+%left '<' '>'
 %left '+' '-'
-%left '*'
+%left '*' '/'
 
 /* "x (" is always a call, never variable x followed by a parenthesised
    top-level expression (same choice the hand-written parser made). */
@@ -66,6 +69,13 @@ void yyerror(const char *S);
 %precedence '('
 
 %%
+
+/// translates type tokens into the cpp datatype enum
+type_decl
+  : INT    { $$ = int_type; }
+  | DOUBLE { $$ = double_type; }
+  | BOOL   { $$ = bool_type; }
+  ;
 
 /// top ::= definition | external | expression | ';'
 program
@@ -101,7 +111,7 @@ prototype
 
 params
   : %empty                { $$ = new std::vector<std::string>(); }
-  | params IDENTIFIER     { $1->push_back(*$2); delete $2; $$ = $1; }
+  | params type_decl IDENTIFIER {$1->push_back(std::make_pair(*$3,$2)); delete $3; $$ = $1;}
   ;
 
 /// expression

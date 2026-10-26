@@ -31,7 +31,7 @@ int yyparse();
 static std::unique_ptr<LLVMContext> TheContext;
 static std::unique_ptr<Module> TheModule;
 static std::unique_ptr<IRBuilder<>> Builder;
-static std::map<std::string, Value *> NamedValues;
+static std::map <std::string, std::pair <Value*,datatype >> NamedValues;
 
 Value *LogErrorV(const char *Str) {
   fprintf(stderr, "Error: %s\n", Str);

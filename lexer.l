@@ -25,6 +25,10 @@ ALPHA   [a-zA-Z]
 "def"                       { return DEF; }
 "extern"                    { return EXTERN; }
 
+"int"                       {return INT; }
+"double"                    {return DOUBLE; }
+"bool"                      {return BOOL; }
+
 {ALPHA}({ALPHA}|{DIGIT})*   { yylval.str = new std::string(yytext);
                               return IDENTIFIER; }
 
