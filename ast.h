@@ -24,22 +24,21 @@ enum datatype {
 /// ExprAST - Base class for all expression nodes.
 class ExprAST {
     public:
-      datatype ExprType; 
+      datatype ExprType = double_type; 
       virtual ~ExprAST() = default;
       virtual llvm::Value *codegen() = 0;
 };
 
 /// NumberExprAST - Expression class for numeric literals like "1.0".
-class NumberExprAST : public ExprAST {
-  double Val;
-
-public:
-    NumberExprAST(double Val) : Val(Val){
-        ExprType = double_type; 
+class NumberExprAST : public ExprAST{
+    double Val;
+  
+  public:
+    NumberExprAST(double Val, datatype type) : Val(Val){
+      ExprType = type;
     }
-
-  llvm::Value *codegen() override;
-};
+    virtual llvm::Value *codegen();
+  };
 
 /// VariableExprAST - Expression class for referencing a variable, like "a".
 class VariableExprAST : public ExprAST {

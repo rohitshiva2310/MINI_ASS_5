@@ -58,14 +58,29 @@ static Type *getLLVMType(datatype T) {
 // Convert V from type From to type To. Only int <-> double is implicit;
 // anything else is reported as an error.
 static Value *CastValue(Value *V, datatype From, datatype To) {
-  if (From == To)
-    return V;
-  if (From == int_type && To == double_type)
-    return Builder->CreateSIToFP(V, getLLVMType(To), "inttodbl");
-  if (From == double_type && To == int_type)
-    return Builder->CreateFPToSI(V, getLLVMType(To), "dbltoint");
-  return LogErrorV("Invalid type conversion");
-}
+    if(From == To)
+      return V;
+    
+    if(From == int_type && To == double_type)
+      return Builder->CreateSIToFP(V, getLLVMType(To), "inttodbl");
+
+    if(From == double_type && To == int_type)
+      return Builder->CreateFPToSI(V, getLLVMType(To), "dbltoint");
+      
+    if(From == bool_type && To == int_type)
+      return Builder->CreateZExt(V, getLLVMType(To), "booltoint");
+
+    if(From == bool_type && To == double_type)
+      return Builder->CreateUIToFP(V, getLLVMType(To), "booltodbl");
+      
+    if(From == int_type && To == bool_type)
+      return Builder->CreateICmpNE(V, ConstantInt::get(Type::getInt32Ty(*TheContext), 0), "inttobool");
+
+    if(From == double_type && To == bool_type)
+      return Builder->CreateFCmpONE(V, ConstantFP::get(*TheContext, APFloat(0.0)), "dbltobool");
+  
+    return LogErrorV("Invalid type conversion");
+  }
 
 Value *NumberExprAST::codegen() {
   if (ExprType == int_type)
@@ -95,14 +110,10 @@ Value *BinaryExprAST::codegen() {
 
   datatype LT = LHS->ExprType, RT = RHS->ExprType;
 
-  if (LT == bool_type || RT == bool_type)
-    return LogErrorV("Binary operators are not valid on bool operands");
-
   // Promote to double if either side is double, otherwise stay int.
   datatype OpType =
       (LT == double_type || RT == double_type) ? double_type : int_type;
-  if (Op == '/')
-    OpType = double_type; // '/' always uses CreateFDiv
+  
 
   L = CastValue(L, LT, OpType);
   R = CastValue(R, RT, OpType);
@@ -125,11 +136,12 @@ Value *BinaryExprAST::codegen() {
     return IsFP ? Builder->CreateFMul(L, R, "multmp")
                 : Builder->CreateMul(L, R, "multmp");
   case '/':
-    ExprType = double_type;
-    return Builder->CreateFDiv(L, R, "divtmp");
+    ExprType = OpType;
+    return IsFP ? Builder->CreateFDiv(L, R, "divtmp")
+                : Builder->CreateSDiv(L, R, "divtmp");
   case '<':
     ExprType = bool_type;
-    return IsFP ? Builder->CreateFCmpULT(L, R, "cmpltmp")
+    return IsFP ? Builder->CreateFCmpOLT(L, R, "cmpltmp")
                 : Builder->CreateICmpSLT(L, R, "cmpltmp");
   case '>':
     ExprType = bool_type;
@@ -197,12 +209,21 @@ Function *PrototypeAST::codegen() {
 }
 
 Function *FunctionAST::codegen() {
-  // First, check for an existing function from a previous 'extern' declaration.
-  Function *TheFunction = TheModule->getFunction(Proto->getName());
+  Function *TheFunction = TheModule-> getFunction(Proto->  getName());
 
-  if (!TheFunction)
-    TheFunction = Proto->codegen();
-
+  if(!TheFunction){
+      TheFunction = Proto->codegen();
+  } 
+  else{
+      if(TheFunction->arg_size() != Proto->getArgs().size())
+        return (Function *)LogErrorV("Function definition arity mismatch with extern");
+      unsigned Idx = 0;
+      for(auto &Arg : TheFunction->args()){
+        if(Arg.getType() != getLLVMType(Proto->getArgs()[Idx++].second))
+          return (Function *)LogErrorV("Function definition type mismatch with extern");
+      }
+   }
+  
   if (!TheFunction)
     return nullptr;
 
@@ -212,6 +233,13 @@ Function *FunctionAST::codegen() {
   // Create a new basic block to start insertion into.
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
   Builder->SetInsertPoint(BB);
+
+  std::vector< std::string > seen;
+  for (const auto &Arg : Proto->getArgs()){
+    if(std::find(seen.begin(), seen.end(), Arg.first) != seen.end())
+        return (Function*)LogErrorV("Duplicate parameter name in function");
+    seen.push_back(Arg.first);
+  }
 
   // Allocate one slot per argument, typed from the (name, datatype) pairs,
   // and record (alloca, type) in the symbol table.

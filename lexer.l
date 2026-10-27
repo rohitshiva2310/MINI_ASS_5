@@ -29,11 +29,13 @@ ALPHA   [a-zA-Z]
 "double"                    {return DOUBLE; }
 "bool"                      {return BOOL; }
 
+"true"                      {return TRUE_LIT;}
+"false"                     {return FALSE_LIT;}
+[0-9]+                      {yylval.num = std::stod(yytext); return INT_LIT;}
+[0-9]+\.[0-9]+              {yylval.num = std::stod(yytext); return DOUBLE_LIT;}
+
 {ALPHA}({ALPHA}|{DIGIT})*   { yylval.str = new std::string(yytext);
                               return IDENTIFIER; }
-
-({DIGIT}|".")+              { yylval.num = strtod(yytext, nullptr);
-                              return NUMBER; }
 
 .                           { return yytext[0]; }
 

@@ -45,7 +45,8 @@ void yyerror(const char *S);
 
 %token DEF EXTERN INT BOOL DOUBLE
 %token <str> IDENTIFIER
-%token <num> NUMBER
+%token <num> INT_LIT DOUBLE_LIT
+%token TRUE_LIT FALSE_LIT
 
 %type <type_enum> type_decl
 %type <expr> expr
@@ -118,7 +119,10 @@ params
 /// expression
 ///   ::= numberexpr | identifierexpr | parenexpr | expression binop expression
 expr
-  : NUMBER                { $$ = new NumberExprAST($1); }
+  :  INT_LIT              {$$ = new NumberExprAST($1, int_type); }
+  | DOUBLE_LIT            {$$ = new NumberExprAST($1, double_type); }
+  | TRUE_LIT              {$$ = new NumberExprAST(1.0, bool_type); }
+  | FALSE_LIT             {$$ = new NumberExprAST(0.0, bool_type); }
   | IDENTIFIER %prec VARIABLE
                           { $$ = new VariableExprAST(*$1); delete $1; }
   | IDENTIFIER '(' args ')'
