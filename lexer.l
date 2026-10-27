@@ -31,8 +31,8 @@ ALPHA   [a-zA-Z]
 
 "true"                      {return TRUE_LIT;}
 "false"                     {return FALSE_LIT;}
-[0-9]+                      {yylval.num = std::stod(yytext); return INT_LIT;}
-[0-9]+\.[0-9]+              {yylval.num = std::stod(yytext); return DOUBLE_LIT;}
+[0-9]+                      {yylval.num = std::strtod(yytext, nullptr); return INT_LIT;}
+[0-9]+\.[0-9]+              {yylval.num = std::strtod(yytext, nullptr); return DOUBLE_LIT;}
 
 {ALPHA}({ALPHA}|{DIGIT})*   { yylval.str = new std::string(yytext);
                               return IDENTIFIER; }

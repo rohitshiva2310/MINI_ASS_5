@@ -16,7 +16,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-
+#include <set>
 using namespace llvm;
 
 // The lexer now lives in lexer.l (flex), the parser in parser.y (bison), and
@@ -55,29 +55,32 @@ static Type *getLLVMType(datatype T) {
   return nullptr;
 }
 
-// Convert V from type From to type To. Only int <-> double is implicit;
-// anything else is reported as an error.
+
+// Convert V from type From to type To. Prints warnings for lossy conversions.
 static Value *CastValue(Value *V, datatype From, datatype To) {
-    if(From == To)
-      return V;
+    if (From == To) return V;
     
-    if(From == int_type && To == double_type)
+    if (From == int_type && To == double_type)
       return Builder->CreateSIToFP(V, getLLVMType(To), "inttodbl");
-
-    if(From == double_type && To == int_type)
-      return Builder->CreateFPToSI(V, getLLVMType(To), "dbltoint");
       
-    if(From == bool_type && To == int_type)
+    if (From == double_type && To == int_type) {
+      fprintf(stderr, "Warning: implicit double -> int conversion truncates\n");
+      return Builder->CreateFPToSI(V, getLLVMType(To), "dbltoint");
+    }
+      
+    if (From == bool_type && To == int_type)
       return Builder->CreateZExt(V, getLLVMType(To), "booltoint");
-
-    if(From == bool_type && To == double_type)
+    if (From == bool_type && To == double_type)
       return Builder->CreateUIToFP(V, getLLVMType(To), "booltodbl");
       
-    if(From == int_type && To == bool_type)
+    if (From == int_type && To == bool_type) {
+      fprintf(stderr, "Warning: implicit int -> bool conversion\n");
       return Builder->CreateICmpNE(V, ConstantInt::get(Type::getInt32Ty(*TheContext), 0), "inttobool");
-
-    if(From == double_type && To == bool_type)
-      return Builder->CreateFCmpONE(V, ConstantFP::get(*TheContext, APFloat(0.0)), "dbltobool");
+    }
+    if (From == double_type && To == bool_type) {
+      fprintf(stderr, "Warning: implicit double -> bool conversion\n");
+      return Builder->CreateFCmpUNE(V, ConstantFP::get(*TheContext, APFloat(0.0)), "dbltobool");
+    }
   
     return LogErrorV("Invalid type conversion");
   }
@@ -188,7 +191,16 @@ Value *CallExprAST::codegen() {
   return Builder->CreateCall(CalleeF, ArgsV, "calltmp");
 }
 
-Function *PrototypeAST::codegen() {
+static bool HasDuplicateParams(const PrototypeAST &P){
+    std::set<std::string> S;
+    for (auto &A : P.getArgs())
+      if (!S.insert(A.first).second) return true;
+    return false;
+}
+
+Function *PrototypeAST::codegen(){
+  if (HasDuplicateParams(*this))
+    return (Function *)LogErrorV("Duplicate parameter name");
   // Each parameter's LLVM type comes from the datatype in its pair.
   std::vector<Type *> ParamTys;
   for (auto &A : getArgs()) // A.first = name, A.second = datatype
@@ -209,6 +221,8 @@ Function *PrototypeAST::codegen() {
 }
 
 Function *FunctionAST::codegen() {
+  if(HasDuplicateParams(*Proto))
+     return (Function *)LogErrorV("Duplicate parameter name");
   Function *TheFunction = TheModule-> getFunction(Proto->  getName());
 
   if(!TheFunction){
@@ -234,13 +248,6 @@ Function *FunctionAST::codegen() {
   BasicBlock *BB = BasicBlock::Create(*TheContext, "entry", TheFunction);
   Builder->SetInsertPoint(BB);
 
-  std::vector< std::string > seen;
-  for (const auto &Arg : Proto->getArgs()){
-    if(std::find(seen.begin(), seen.end(), Arg.first) != seen.end())
-        return (Function*)LogErrorV("Duplicate parameter name in function");
-    seen.push_back(Arg.first);
-  }
-
   // Allocate one slot per argument, typed from the (name, datatype) pairs,
   // and record (alloca, type) in the symbol table.
   NamedValues.clear();
@@ -260,24 +267,19 @@ Function *FunctionAST::codegen() {
   }
 
   if (Value *RetVal = Body->codegen()) {
-    // The function returns double: bool results are converted with UIToFP,
-    // int results with SIToFP.
-    if (Body->ExprType == bool_type) {
-      RetVal = Builder->CreateUIToFP(RetVal, Type::getDoubleTy(*TheContext),
-                                     "booltmp");
-    } else {
-      RetVal = CastValue(RetVal, Body->ExprType, double_type);
-      if (!RetVal) {
-        TheFunction->eraseFromParent();
-        return nullptr;
-      }
+    // The function returns double: use CastValue for all types
+    RetVal = CastValue(RetVal, Body->ExprType, double_type);
+    if (!RetVal) {
+      TheFunction->eraseFromParent();
+      return nullptr;
     }
 
-    // Finish off the function.
     Builder->CreateRet(RetVal);
 
-    // Validate the generated code, checking for consistency.
-    verifyFunction(*TheFunction);
+    if (verifyFunction(*TheFunction, &errs())) {
+      TheFunction->eraseFromParent();
+      return nullptr;
+    }
 
     return TheFunction;
   }
