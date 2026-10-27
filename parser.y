@@ -41,6 +41,7 @@ void yyerror(const char *S);
 }
 
 %define parse.error detailed
+%start program
 
 %token DEF EXTERN INT BOOL DOUBLE
 %token <str> IDENTIFIER
@@ -54,7 +55,7 @@ void yyerror(const char *S);
 %type <param_list> params
 
 /* Free values that get discarded during error recovery. */
-%destructor { delete $$; } <str> <expr> <proto> <func> <names> <param_list>
+%destructor { delete $$; } <str> <expr> <proto> <func>  <param_list>
 %destructor { for (ExprAST *E : *$$) delete E; delete $$; } <exprs>
 
 /* Precedence, lowest first. Matches the old BinopPrecedence table:
@@ -110,8 +111,8 @@ prototype
   ;
 
 params
-  : %empty                { $$ = new std::vector<std::string>(); }
-  | params type_decl IDENTIFIER {$1->push_back(std::make_pair(*$3,$2)); delete $3; $$ = $1;}
+  : %empty                          { $$ = new std::vector< std::pair<std::string,datatype >>();}
+  | params type_decl IDENTIFIER     { $1->push_back(std::make_pair(*$3, $2)); delete $3; $$ = $1; }
   ;
 
 /// expression
@@ -128,14 +129,18 @@ expr
                             $$ = new CallExprAST(*$1, std::move(Args));
                             delete $1; }
   | '(' expr ')'          { $$ = $2; }
-  | expr '<' expr         { $$ = new BinaryExprAST('<', std::unique_ptr<ExprAST>($1),
-                                                        std::unique_ptr<ExprAST>($3)); }
-  | expr '+' expr         { $$ = new BinaryExprAST('+', std::unique_ptr<ExprAST>($1),
-                                                        std::unique_ptr<ExprAST>($3)); }
-  | expr '-' expr         { $$ = new BinaryExprAST('-', std::unique_ptr<ExprAST>($1),
-                                                        std::unique_ptr<ExprAST>($3)); }
-  | expr '*' expr         { $$ = new BinaryExprAST('*', std::unique_ptr<ExprAST>($1),
-                                                        std::unique_ptr<ExprAST>($3)); }
+  | expr '<' expr         {$$ = new BinaryExprAST('<', std::unique_ptr<ExprAST>($1), 
+                                std::unique_ptr<ExprAST>($3)); }
+  | expr '>' expr         {$$ = new BinaryExprAST('>', std::unique_ptr<ExprAST>($1), 
+                                std::unique_ptr<ExprAST>($3)); }
+  | expr '+' expr         {$$ = new BinaryExprAST('+', std::unique_ptr<ExprAST>($1), 
+                                std::unique_ptr<ExprAST>($3)); }
+  | expr '-' expr         {$$ = new BinaryExprAST('-', std::unique_ptr<ExprAST>($1), 
+                                std::unique_ptr<ExprAST>($3)); }
+  | expr '*' expr         {$$ = new BinaryExprAST('*', std::unique_ptr<ExprAST>($1), 
+                                std::unique_ptr<ExprAST>($3)); }
+  | expr '/' expr         {$$ = new BinaryExprAST('/', std::unique_ptr<ExprAST>($1), 
+                                std::unique_ptr<ExprAST>($3)); }
   ;
 
 /// args ::= (expression (',' expression)*)?
